@@ -1,0 +1,113 @@
+version: "3.3"
+services:
+
+  rabbitmq:
+    image: rabbitmq
+    command: rabbitmq-server
+    ports:
+      - "5672:5672"
+    volumes:
+       - rabbitmq-v:/var/lib/rabbitmq
+
+  celery:
+    build: ./server2
+    volumes:
+      - ./server2:/code2
+    command: celery -A server2 worker -l info
+    links:
+      - rabbitmq
+    depends_on:
+      - rabbitmq
+      - server2
+
+
+  migration1:
+    build: ./server1
+    volumes:
+      - ./server1:/code1
+    command: python manage.py migrate
+    links:
+      - db
+    depends_on:
+      - db
+
+  migration2:
+    build: ./server2
+    volumes:
+      - ./server2:/code2
+    command: python manage.py migrate
+    links:
+      - db2
+    depends_on:
+      - db2
+
+  server1:
+    build: ./server1
+    volumes:
+      - ./server1:/code1
+    command: python manage.py runserver 0.0.0.0:8001
+    ports:
+      - "8001:8001"
+    links:
+      - db
+    depends_on:
+      - db
+
+  server2:
+    build: ./server2
+    command: python manage.py runserver 0.0.0.0:8002
+    volumes:
+      - ./server2:/code2
+    ports:
+      - "8002:8002"
+    links:
+      - rabbitmq
+      - db2
+    depends_on:
+      - rabbitmq
+      - db2
+
+  db:
+    image: mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${DB_NAME}
+      MYSQL_USER: ${DB_USER}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - my-db:/var/lib/mysql
+    ports:
+      - "3307:3306"
+
+  db2:
+    image: mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB2_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${DB2_NAME}
+      MYSQL_USER: ${DB2_USER}
+      MYSQL_PASSWORD: ${DB2_PASSWORD}
+    volumes:
+      - my-db2:/var/lib/mysql
+    ports:
+      - "3308:3306"
+
+  nginx:
+    image: nginx:latest
+    build:
+      context: nginx
+      dockerfile: Dockerfile
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+    links:
+      - server1
+      - server2
+    depends_on:
+      - server1
+      - server2
+
+volumes:
+  my-db:
+  my-db2:
+  rabbitmq-v:
